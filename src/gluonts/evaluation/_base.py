@@ -56,7 +56,7 @@ def worker_function(evaluator: "Evaluator", inp: tuple):
 
 
 def aggregate_all(
-    metric_per_ts: pd.DataFrame, agg_funs: Dict[str, str]
+        metric_per_ts: pd.DataFrame, agg_funs: Dict[str, str]
 ) -> Dict[str, float]:
     """
     No filtering applied.
@@ -70,7 +70,7 @@ def aggregate_all(
 
 
 def aggregate_no_nan(
-    metric_per_ts: pd.DataFrame, agg_funs: Dict[str, str]
+        metric_per_ts: pd.DataFrame, agg_funs: Dict[str, str]
 ) -> Dict[str, float]:
     """
     Filter all `nan` but keep `inf`.
@@ -85,7 +85,7 @@ def aggregate_no_nan(
 
 
 def aggregate_valid(
-    metric_per_ts: pd.DataFrame, agg_funs: Dict[str, str]
+        metric_per_ts: pd.DataFrame, agg_funs: Dict[str, str]
 ) -> Dict[str, Union[float, np.ma.core.MaskedConstant]]:
     """
     Filter all `nan` & `inf` values from `metric_per_ts`.
@@ -157,16 +157,16 @@ class Evaluator:
     default_quantiles = 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9
 
     def __init__(
-        self,
-        quantiles: Iterable[Union[float, str]] = default_quantiles,
-        seasonality: Optional[int] = None,
-        alpha: float = 0.05,
-        calculate_owa: bool = False,
-        custom_eval_fn: Optional[Dict] = None,
-        num_workers: Optional[int] = multiprocessing.cpu_count(),
-        chunk_size: int = 32,
-        aggregation_strategy: Callable = aggregate_no_nan,
-        ignore_invalid_values: bool = True,
+            self,
+            quantiles: Iterable[Union[float, str]] = default_quantiles,
+            seasonality: Optional[int] = None,
+            alpha: float = 0.05,
+            calculate_owa: bool = False,
+            custom_eval_fn: Optional[Dict] = None,
+            num_workers: Optional[int] = multiprocessing.cpu_count(),
+            chunk_size: int = 32,
+            aggregation_strategy: Callable = aggregate_no_nan,
+            ignore_invalid_values: bool = True,
     ) -> None:
         self.quantiles = tuple(map(Quantile.parse, quantiles))
         self.seasonality = seasonality
@@ -179,10 +179,12 @@ class Evaluator:
         self.ignore_invalid_values = ignore_invalid_values
 
     def __call__(
-        self,
-        ts_iterator: Iterable[Union[pd.DataFrame, pd.Series]],
-        fcst_iterator: Iterable[Forecast],
-        num_series: Optional[int] = None,
+            self,
+            ts_iterator: Iterable[Union[pd.DataFrame, pd.Series]],
+            fcst_iterator: Iterable[Forecast],
+            num_series: Optional[int] = None,
+            agg_mode: Optional[str] = None,
+            agg_window_size: Optional[Union[str, int]] = "1",
     ) -> Tuple[Dict[str, float], pd.DataFrame]:
         """
         Compute accuracy metrics by comparing actual data to the forecasts.
@@ -204,31 +206,39 @@ class Evaluator:
         pd.DataFrame
             DataFrame containing per-time-series metrics
         """
+
         ts_iterator = iter(ts_iterator)
         fcst_iterator = iter(fcst_iterator)
 
         rows = []
-
+        print("before loop")
         with tqdm(
-            zip(ts_iterator, fcst_iterator),
-            total=num_series,
-            desc="Running evaluation",
+                zip(ts_iterator, fcst_iterator),
+                total=num_series,
+                desc="Running evaluation",
         ) as it, np.errstate(invalid="ignore"):
-            if self.num_workers and not sys.platform == "win32":
-                mp_pool = multiprocessing.Pool(
-                    initializer=None, processes=self.num_workers
-                )
-                rows = mp_pool.map(
-                    func=partial(worker_function, self),
-                    iterable=iter(it),
-                    chunksize=self.chunk_size,
-                )
-                mp_pool.close()
-                mp_pool.join()
-            else:
-                for ts, forecast in it:
-                    rows.append(self.get_metrics_per_ts(ts, forecast))
+            # if self.num_workers and not sys.platform == "win32":
+            #
+            #     print("c1")
+            #     mp_pool = multiprocessing.Pool(
+            #         initializer=None, processes=self.num_workers
+            #     )
+            #     rows = mp_pool.map(
+            #         func=partial(worker_function, self),
+            #         iterable=iter(it),
+            #         chunksize=self.chunk_size,
+            #     )
+            #     mp_pool.close()
+            #     mp_pool.join()
+            # else:
+            #     print("c2")
+            #     for ts, forecast in it:
+            #         rows.append(self.get_metrics_per_ts(ts, forecast, agg_mode, agg_window_size))
 
+            for ts, forecast in it:
+                # rows.append(self.get_metrics_per_ts(ts, forecast))
+                rows.append(self.get_metrics_per_ts(ts, forecast, agg_mode, agg_window_size))
+        print("out of loop")
         assert not any(
             True for _ in ts_iterator
         ), "ts_iterator has more elements than fcst_iterator"
@@ -253,7 +263,7 @@ class Evaluator:
 
     @staticmethod
     def extract_pred_target(
-        time_series: Union[pd.Series, pd.DataFrame], forecast: Forecast
+            time_series: Union[pd.Series, pd.DataFrame], forecast: Forecast
     ) -> np.ndarray:
         """
 
@@ -284,7 +294,7 @@ class Evaluator:
     # sequence from the Series or DataFrame to a numpy array
     @staticmethod
     def extract_past_data(
-        time_series: Union[pd.Series, pd.DataFrame], forecast: Forecast
+            time_series: Union[pd.Series, pd.DataFrame], forecast: Forecast
     ) -> np.ndarray:
         """
 
@@ -315,8 +325,47 @@ class Evaluator:
             np.squeeze(time_series.loc[:date_before_forecast].transpose())
         )
 
+    def agg_transform_data(
+            self,
+            data: np.ndarray,
+            agg_mode: Optional[str] = None,
+            agg_window_size: Optional[Union[str, int]] = "1",
+    ) -> np.ndarray:
+        """
+
+        Parameters
+        ----------
+
+
+        Returns
+        -------
+        np.ndarray
+            time series without the forecast dates
+        """
+
+        agg_window_size = int(agg_window_size)
+        if data is None or agg_mode is None or agg_window_size==1:
+            return data
+
+        assert len(data.shape) == 1, "must be 1-d array"
+        ts_length = len(data)
+        if agg_mode == "causal_moving_average":
+            return np.array([np.average(data[i: min(i + agg_window_size, ts_length)])
+                             for i in range(ts_length)
+                             ])
+        elif agg_mode == "aggregation":
+            ts_agg_length = int(np.ceil(ts_length / float(agg_window_size)))
+            return np.array([sum(data[i * agg_window_size: min((i + 1) * agg_window_size, ts_length)])
+                             for i in range(ts_agg_length)
+                             ])
+        return data
+
     def get_metrics_per_ts(
-        self, time_series: Union[pd.Series, pd.DataFrame], forecast: Forecast
+            self,
+            time_series: Union[pd.Series, pd.DataFrame],
+            forecast: Forecast,
+            agg_mode: Optional[str] = None,
+            agg_window_size: Optional[Union[str, int]] = "1",
     ) -> Mapping[str, Union[float, str, None, np.ma.core.MaskedConstant]]:
         pred_target = np.array(self.extract_pred_target(time_series, forecast))
         past_data = np.array(self.extract_past_data(time_series, forecast))
@@ -331,8 +380,16 @@ class Evaluator:
             mean_fcst = None
 
         median_fcst = forecast.quantile(0.5)
+
+        # TODO:
+        pred_target = self.agg_transform_data(pred_target, agg_mode, agg_window_size)
+        past_data = self.agg_transform_data(past_data, agg_mode, agg_window_size)
+        mean_fcst = self.agg_transform_data(mean_fcst, agg_mode, agg_window_size)
+
+        # TODO: need to check scale of seasonal_error after aggregation
         seasonal_error = calculate_seasonal_error(
-            past_data, forecast, self.seasonality
+            # past_data, forecast, self.seasonality
+            past_data, forecast.freq, self.seasonality
         )
 
         metrics: Dict[str, Union[float, str, None]] = {
@@ -376,10 +433,15 @@ class Evaluator:
                 metrics.update(val)
 
         try:
+
+            forecast_quantile_low = self.agg_transform_data(forecast.quantile(self.alpha / 2), agg_mode,
+                                                            agg_window_size)
+            forecast_quantile_high = self.agg_transform_data(forecast.quantile(1.0 - self.alpha / 2), agg_mode,
+                                                             agg_window_size)
             metrics["MSIS"] = msis(
                 pred_target,
-                forecast.quantile(self.alpha / 2),
-                forecast.quantile(1.0 - self.alpha / 2),
+                forecast_quantile_low,
+                forecast_quantile_high,
                 seasonal_error,
                 self.alpha,
             )
@@ -399,7 +461,8 @@ class Evaluator:
             )
 
         for quantile in self.quantiles:
-            forecast_quantile = forecast.quantile(quantile.value)
+            # forecast_quantile = forecast.quantile(quantile.value)
+            forecast_quantile = self.agg_transform_data(forecast.quantile(quantile.value), agg_mode, agg_window_size)
 
             metrics[quantile.loss_name] = quantile_loss(
                 pred_target, forecast_quantile, quantile.value
@@ -411,7 +474,7 @@ class Evaluator:
         return metrics
 
     def get_aggregate_metrics(
-        self, metric_per_ts: pd.DataFrame
+            self, metric_per_ts: pd.DataFrame
     ) -> Tuple[Dict[str, float], pd.DataFrame]:
         # Define how to aggregate metrics
         agg_funs = {
@@ -438,7 +501,7 @@ class Evaluator:
                 agg_funs.update({k: agg_type})
 
         assert (
-            set(metric_per_ts.columns) >= agg_funs.keys()
+                set(metric_per_ts.columns) >= agg_funs.keys()
         ), "Some of the requested item metrics are missing."
 
         # Compute the aggregation
@@ -453,7 +516,7 @@ class Evaluator:
 
         for quantile in self.quantiles:
             totals[quantile.weighted_loss_name] = (
-                totals[quantile.loss_name] / totals["abs_target_sum"]
+                    totals[quantile.loss_name] / totals["abs_target_sum"]
             )
 
         totals["mean_absolute_QuantileLoss"] = np.array(
@@ -484,8 +547,8 @@ class Evaluator:
                 totals["OWA"] = np.nan
             else:
                 totals["OWA"] = 0.5 * (
-                    totals["sMAPE"] / totals["sMAPE_naive2"]
-                    + totals["MASE"] / totals["MASE_naive2"]
+                        totals["sMAPE"] / totals["sMAPE_naive2"]
+                        + totals["MASE"] / totals["MASE_naive2"]
                 )
             # We get rid of the naive_2 metrics
             del totals["sMAPE_naive2"]
@@ -525,14 +588,14 @@ class MultivariateEvaluator(Evaluator):
     """
 
     def __init__(
-        self,
-        quantiles: Iterable[Union[float, str]] = np.linspace(0.1, 0.9, 9),
-        seasonality: Optional[int] = None,
-        alpha: float = 0.05,
-        eval_dims: List[int] = None,
-        target_agg_funcs: Dict[str, Callable] = {},
-        custom_eval_fn: Optional[dict] = None,
-        num_workers: Optional[int] = None,
+            self,
+            quantiles: Iterable[Union[float, str]] = np.linspace(0.1, 0.9, 9),
+            seasonality: Optional[int] = None,
+            alpha: float = 0.05,
+            eval_dims: List[int] = None,
+            target_agg_funcs: Dict[str, Callable] = {},
+            custom_eval_fn: Optional[dict] = None,
+            num_workers: Optional[int] = None,
     ) -> None:
         """
 
@@ -570,28 +633,28 @@ class MultivariateEvaluator(Evaluator):
 
     @staticmethod
     def extract_target_by_dim(
-        it_iterator: Iterator[pd.DataFrame], dim: int
+            it_iterator: Iterator[pd.DataFrame], dim: int
     ) -> Iterator[pd.DataFrame]:
         for i in it_iterator:
             yield (i[dim])
 
     @staticmethod
     def extract_forecast_by_dim(
-        forecast_iterator: Iterator[Forecast], dim: int
+            forecast_iterator: Iterator[Forecast], dim: int
     ) -> Iterator[Forecast]:
         for forecast in forecast_iterator:
             yield forecast.copy_dim(dim)
 
     @staticmethod
     def extract_aggregate_target(
-        it_iterator: Iterator[pd.DataFrame], agg_fun: Callable
+            it_iterator: Iterator[pd.DataFrame], agg_fun: Callable
     ) -> Iterator[pd.DataFrame]:
         for i in it_iterator:
             yield i.agg(agg_fun, axis=1)
 
     @staticmethod
     def extract_aggregate_forecast(
-        forecast_iterator: Iterator[Forecast], agg_fun: Callable
+            forecast_iterator: Iterator[Forecast], agg_fun: Callable
     ) -> Iterator[Forecast]:
         for forecast in forecast_iterator:
             yield forecast.copy_aggregate(agg_fun)
@@ -625,10 +688,10 @@ class MultivariateEvaluator(Evaluator):
         return eval_dims
 
     def calculate_aggregate_multivariate_metrics(
-        self,
-        ts_iterator: Iterator[pd.DataFrame],
-        forecast_iterator: Iterator[Forecast],
-        agg_fun: Callable,
+            self,
+            ts_iterator: Iterator[pd.DataFrame],
+            forecast_iterator: Iterator[Forecast],
+            agg_fun: Callable,
     ) -> Dict[str, float]:
         """
 
@@ -652,9 +715,9 @@ class MultivariateEvaluator(Evaluator):
         return agg_metrics
 
     def calculate_aggregate_vector_metrics(
-        self,
-        all_agg_metrics: Dict[str, float],
-        all_metrics_per_ts: pd.DataFrame,
+            self,
+            all_agg_metrics: Dict[str, float],
+            all_metrics_per_ts: pd.DataFrame,
     ) -> Dict[str, float]:
         """
 
@@ -680,10 +743,10 @@ class MultivariateEvaluator(Evaluator):
         return all_agg_metrics
 
     def __call__(
-        self,
-        ts_iterator: Iterable[pd.DataFrame],
-        fcst_iterator: Iterable[Forecast],
-        num_series=None,
+            self,
+            ts_iterator: Iterable[pd.DataFrame],
+            fcst_iterator: Iterable[Forecast],
+            num_series=None,
     ) -> Tuple[Dict[str, float], pd.DataFrame]:
         ts_iterator = iter(ts_iterator)
         fcst_iterator = iter(fcst_iterator)
