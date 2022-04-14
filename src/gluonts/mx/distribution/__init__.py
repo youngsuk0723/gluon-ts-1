@@ -69,8 +69,17 @@ from .isqf import (
     ISQF,
     ISQFOutput,
 )
+
+from .event_neg_binomial import (
+    EventNegativeBinomial,
+    EventNegativeBinomialOutput,
+)
+from .event_student_t import (
+    EventStudentT,
+    EventStudentTOutput,
+)
 from .poisson import Poisson, PoissonOutput, ZeroInflatedPoissonOutput
-from .student_t import StudentT, StudentTOutput
+from .student_t import StudentT, StudentTOutput, ZeroInflatedStudentTOutput
 from .transformed_distribution import TransformedDistribution
 from .transformed_distribution_output import TransformedDistributionOutput
 from .uniform import Uniform, UniformOutput
@@ -94,6 +103,10 @@ __all__ = [
     "DistributionOutput",
     "EmpiricalDistribution",
     "EmpiricalDistributionOutput",
+    "EventNagetiveBinomial",
+    "EventNagetiveBinomialOutput",
+    "EventStudentT",
+    "EventStudentTOutput",
     "FixedKnotsPiecewiseLinearOutput",
     "Gamma",
     "GammaOutput",
@@ -138,4 +151,5 @@ __all__ = [
     "ZeroInflatedBetaOutput",
     "ZeroInflatedNegativeBinomialOutput",
     "ZeroInflatedPoissonOutput",
+    "ZeroInflatedStudentTOutput",
 ]

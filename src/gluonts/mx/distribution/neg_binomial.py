@@ -42,7 +42,7 @@ class NegativeBinomial(Distribution):
     is_reparameterizable = False
 
     @validated()
-    def __init__(self, mu: Tensor, alpha: Tensor) -> None:
+    def __init__(self, mu: Tensor, alpha: Tensor, F=None) -> None:
         self.mu = mu
         self.alpha = alpha
 
@@ -83,17 +83,30 @@ class NegativeBinomial(Distribution):
     def stddev(self) -> Tensor:
         return self.F.sqrt(self.mu * (1.0 + self.mu * self.alpha))
 
+    # def sample(
+    #     self, num_samples: Optional[int] = None, dtype=np.float32
+    # ) -> Tensor:
+    #     def s(mu: Tensor, alpha: Tensor) -> Tensor:
+    #         F = self.F
+    #         r = 1.0 / alpha
+    #         theta = alpha * mu
+    #         return F.random.poisson(lam=F.random.gamma(r, theta), dtype=dtype)
+    #
+    #     return _sample_multiple(
+    #         s, mu=self.mu, alpha=self.alpha, num_samples=num_samples
+    #     )
+    def one_sample(self, mu: Tensor, alpha: Tensor, dtype=np.float32) -> Tensor:
+        F = self.F
+        r = 1.0 / alpha
+        theta = alpha * mu
+        return F.random.poisson(lam=F.random.gamma(r, theta), dtype=dtype)
+
     def sample(
         self, num_samples: Optional[int] = None, dtype=np.float32
     ) -> Tensor:
-        def s(mu: Tensor, alpha: Tensor) -> Tensor:
-            F = self.F
-            r = 1.0 / alpha
-            theta = alpha * mu
-            return F.random.poisson(lam=F.random.gamma(r, theta), dtype=dtype)
 
         return _sample_multiple(
-            s, mu=self.mu, alpha=self.alpha, num_samples=num_samples
+            self.one_sample, mu=self.mu, alpha=self.alpha, dtype=dtype, num_samples=num_samples
         )
 
     @property

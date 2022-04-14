@@ -67,6 +67,25 @@ class ArgProj(gluon.HybridBlock):
 
     # noinspection PyMethodOverriding,PyPep8Naming
     def hybrid_forward(self, F, x: Tensor, **kwargs) -> Tuple[Tensor]:
+        """
+
+        :param F:
+        :param x:
+
+            x: dec_output
+            e.g., mqcnn:
+              shape: (batch_size, num_forking, decoder_length, decoder_mlp_dim_seq[0])
+            e.g., deepar:
+              shape: (batch_size * num_samples, 1, num_cells)
+        :param kwargs:
+        :return:
+            e.g., mqcnn:
+              shape: [(batch_size, num_forking, decoder_length, dim) for name, dim in args_dim.items()]
+            e.g., deepar:
+              shape: [(batch_size * num_samples, 1, dim) for name, dim in args_dim.items()]
+        """
+
+
         params_unbounded = [proj(x) for proj in self.proj]
 
         return self.domain_map(*params_unbounded)

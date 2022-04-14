@@ -49,11 +49,17 @@ from .metrics import (
     smape,
 )
 
-
-def worker_function(evaluator: "Evaluator", inp: tuple):
+#
+# def worker_function(evaluator: "Evaluator", inp: tuple):
+#     ts, forecast = inp
+#     return evaluator.get_metrics_per_ts(ts, forecast)
+#
+def worker_function(evaluator: "Evaluator",
+                    agg_mode: Optional[str],
+                    agg_window_size: Optional[Union[str, int]],
+                    inp: tuple):
     ts, forecast = inp
-    return evaluator.get_metrics_per_ts(ts, forecast)
-
+    return evaluator.get_metrics_per_ts(ts, forecast, agg_mode, agg_window_size)
 
 def aggregate_all(
         metric_per_ts: pd.DataFrame, agg_funs: Dict[str, str]
@@ -211,34 +217,43 @@ class Evaluator:
         fcst_iterator = iter(fcst_iterator)
 
         rows = []
-        print("before loop")
-        with tqdm(
-                zip(ts_iterator, fcst_iterator),
-                total=num_series,
-                desc="Running evaluation",
-        ) as it, np.errstate(invalid="ignore"):
-            # if self.num_workers and not sys.platform == "win32":
-            #
-            #     print("c1")
-            #     mp_pool = multiprocessing.Pool(
-            #         initializer=None, processes=self.num_workers
-            #     )
-            #     rows = mp_pool.map(
-            #         func=partial(worker_function, self),
-            #         iterable=iter(it),
-            #         chunksize=self.chunk_size,
-            #     )
-            #     mp_pool.close()
-            #     mp_pool.join()
-            # else:
-            #     print("c2")
-            #     for ts, forecast in it:
-            #         rows.append(self.get_metrics_per_ts(ts, forecast, agg_mode, agg_window_size))
+        # print("before loop")
 
-            for ts, forecast in it:
-                # rows.append(self.get_metrics_per_ts(ts, forecast))
-                rows.append(self.get_metrics_per_ts(ts, forecast, agg_mode, agg_window_size))
-        print("out of loop")
+
+
+        with tqdm(
+            zip(ts_iterator, fcst_iterator),
+            total=num_series,
+            desc="Running evaluation",
+        ) as it, np.errstate(invalid="ignore"):
+            if self.num_workers and not sys.platform == "win32":
+                mp_pool = multiprocessing.Pool(
+                    initializer=None, processes=self.num_workers
+                )
+                rows = mp_pool.map(
+                    func=partial(worker_function, self, agg_mode, agg_window_size),
+                    # func=partial(worker_function, self),
+                    iterable=iter(it),
+                    chunksize=self.chunk_size,
+                )
+                mp_pool.close()
+                mp_pool.join()
+            else:
+                for ts, forecast in it:
+                    rows.append(self.get_metrics_per_ts(ts, forecast, agg_mode, agg_window_size))
+                    # rows.append(self.get_metrics_per_ts(ts, forecast))
+
+        #
+        # with tqdm(
+        #         zip(ts_iterator, fcst_iterator),
+        #         total=num_series,
+        #         desc="Running evaluation",
+        # ) as it, np.errstate(invalid="ignore"):
+        #     for ts, forecast in it:
+        #         # rows.append(self.get_metrics_per_ts(ts, forecast, agg_mode, agg_window_size))
+        #         rows.append(self.get_metrics_per_ts(ts, forecast))
+
+        # print("out of loop")
         assert not any(
             True for _ in ts_iterator
         ), "ts_iterator has more elements than fcst_iterator"

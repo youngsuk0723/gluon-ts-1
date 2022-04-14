@@ -27,6 +27,8 @@ from .distribution import (
     softplus,
 )
 from .distribution_output import DistributionOutput
+from .deterministic import DeterministicOutput
+from .mixture import MixtureDistributionOutput
 
 
 class StudentT(Distribution):
@@ -96,26 +98,50 @@ class StudentT(Distribution):
         ll = Z - nup1_half * F.log1p(part1)
         return ll
 
+    def one_sample(self, mu: Tensor, sigma: Tensor, nu: Tensor, dtype=np.float32) -> Tensor:
+        F = self.F
+        gammas = F.sample_gamma(
+            alpha=nu / 2.0, beta=2.0 / (nu * F.square(sigma)), dtype=dtype
+        )
+        normal = F.sample_normal(
+            mu=mu, sigma=1.0 / F.sqrt(gammas), dtype=dtype
+        )
+        return normal
+
+
+
     def sample(
         self, num_samples: Optional[int] = None, dtype=np.float32
     ) -> Tensor:
-        def s(mu: Tensor, sigma: Tensor, nu: Tensor) -> Tensor:
-            F = self.F
-            gammas = F.sample_gamma(
-                alpha=nu / 2.0, beta=2.0 / (nu * F.square(sigma)), dtype=dtype
-            )
-            normal = F.sample_normal(
-                mu=mu, sigma=1.0 / F.sqrt(gammas), dtype=dtype
-            )
-            return normal
 
         return _sample_multiple(
-            s,
+            self.one_sample,
             mu=self.mu,
             sigma=self.sigma,
             nu=self.nu,
-            num_samples=num_samples,
+            dtype=dtype,
+            num_samples=num_samples
         )
+
+    # def sample(
+    #     self, num_samples: Optional[int] = None, dtype=np.float32
+    # ) -> Tensor:
+    #     def s(mu: Tensor, sigma: Tensor, nu: Tensor) -> Tensor:
+    #         F = self.F
+    #         gammas = F.sample_gamma(
+    #             alpha=nu / 2.0, beta=2.0 / (nu * F.square(sigma)), dtype=dtype
+    #         )
+    #         normal = F.sample_normal(
+    #             mu=mu, sigma=1.0 / F.sqrt(gammas), dtype=dtype
+    #         )
+    #         return normal
+    #     return _sample_multiple(
+    #         s,
+    #         mu=self.mu,
+    #         sigma=self.sigma,
+    #         nu=self.nu,
+    #         num_samples=num_samples,
+    #     )
 
     @property
     def args(self) -> List:
@@ -135,3 +161,8 @@ class StudentTOutput(DistributionOutput):
     @property
     def event_shape(self) -> Tuple:
         return ()
+
+def ZeroInflatedStudentTOutput() -> MixtureDistributionOutput:
+    return MixtureDistributionOutput(
+        distr_outputs=[StudentTOutput(), DeterministicOutput(0)]
+    )
